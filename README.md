@@ -32,6 +32,9 @@ This service provides the foundational infrastructure for the ORDIN platform:
 - ✅ Task ingestion and validation with Firestore storage
 - ✅ Per-user task isolation via subcollection structure
 - ✅ Task filtering and pagination
+- ✅ Google Calendar OAuth integration (read-only)
+- ✅ Privacy-preserving busy block storage (no event titles)
+- ✅ Availability computation using user preferences
 
 ## Project Structure
 
@@ -45,7 +48,8 @@ app/
 │   └── v1/
 │       ├── __init__.py      # API v1 router aggregation
 │       ├── users.py         # User profile endpoints
-│       └── tasks.py         # Task CRUD endpoints
+│       ├── tasks.py         # Task CRUD endpoints
+│       └── calendar.py      # Calendar & availability endpoints (A5)
 ├── auth/
 │   ├── __init__.py          # Auth package exports
 │   ├── context.py           # UserContext model (immutable)
@@ -65,6 +69,12 @@ app/
 ├── db/
 │   ├── __init__.py          # Database package exports
 │   └── firestore.py         # Firestore client initialization
+├── integrations/
+│   ├── __init__.py          # External integrations
+│   └── calendar/
+│       ├── __init__.py      # Calendar provider exports
+│       ├── base.py          # Abstract CalendarProvider interface
+│       └── google.py        # Google Calendar implementation
 ├── middleware/
 │   ├── __init__.py
 │   ├── logging.py           # Request/response logging
@@ -72,15 +82,18 @@ app/
 ├── models/
 │   ├── __init__.py          # User profile & preferences models
 │   ├── task.py              # Task models (Task, TaskCreate, etc.)
+│   ├── calendar.py          # Calendar models (BusyBlock, etc.) (A5)
 │   └── user.py              # Re-exports for convenience
 ├── repositories/
 │   ├── __init__.py          # Repository exports
 │   ├── user_repository.py   # Firestore user data access
-│   └── task_repository.py   # Firestore task data access
+│   ├── task_repository.py   # Firestore task data access
+│   └── calendar_repository.py # Calendar integrations & busy blocks (A5)
 ├── services/
 │   ├── __init__.py          # Service exports
 │   ├── user_service.py      # User profile service
-│   └── task_service.py      # Task service
+│   ├── task_service.py      # Task service
+│   └── calendar_service.py  # Calendar sync & availability (A5)
 └── schemas/
     ├── __init__.py
     └── responses.py         # Pydantic response models
@@ -91,7 +104,8 @@ tests/
 ├── test_health.py           # Health endpoint tests
 ├── test_exceptions.py       # Exception handling tests
 ├── test_user_profile.py     # User profile tests
-└── test_tasks.py            # Task model and service tests
+├── test_tasks.py            # Task model and service tests
+└── test_calendar.py         # Calendar integration tests (A5)
 ```
 
 ## Quick Start
@@ -150,6 +164,12 @@ The API will be available at `http://localhost:8000`
 | `/api/v1/tasks/{task_id}/start` | POST | Mark task as in progress |
 | `/api/v1/tasks/{task_id}/archive` | POST | Archive task (soft delete) |
 | `/api/v1/tasks/bulk/status` | POST | Bulk update task statuses |
+| `/api/v1/calendar/oauth/{provider}/initiate` | GET | Start OAuth flow |
+| `/api/v1/calendar/oauth/{provider}/callback` | GET | OAuth callback |
+| `/api/v1/calendar/integrations` | GET | List calendar integrations |
+| `/api/v1/calendar/{provider}/sync` | POST | Sync calendar events |
+| `/api/v1/calendar/{provider}` | DELETE | Disconnect calendar |
+| `/api/v1/calendar/availability` | POST | Compute availability |
 | `/docs` | GET | Swagger UI (dev mode only) |
 | `/redoc` | GET | ReDoc documentation (dev mode only) |
 
@@ -534,6 +554,189 @@ curl -X POST http://localhost:8000/api/v1/tasks/bulk/status \
 - **Soft delete**: `POST /api/v1/tasks/{task_id}/archive` sets status to `archived`
 
 Use archived status for tasks you want to preserve for history/analytics.
+
+## Calendar Integration (A5)
+
+ORDIN integrates with external calendars to determine user availability. Currently supports Google Calendar with plans for Apple Calendar and Microsoft Outlook.
+
+### Privacy-First Design
+
+**Minimal data retention**: Only busy/free information is stored. Event titles, descriptions, attendees, and other metadata are **never** stored in ORDIN. This protects user privacy while enabling intelligent scheduling.
+
+### Key Features
+
+- ✅ OAuth 2.0 authentication (read-only calendar access)
+- ✅ Provider-agnostic interface (easy to add new providers)
+- ✅ Idempotent sync (safe to retry, handles deletions)
+- ✅ Availability computation using user preferences
+- ✅ Automatic token refresh
+- ✅ Rate limit handling with exponential backoff
+
+### OAuth Setup (Google Calendar)
+
+1. **Create OAuth credentials** in [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+   - Application type: Web application
+   - Authorized redirect URI: `http://localhost:8000/api/v1/calendar/oauth/google/callback`
+
+2. **Enable Google Calendar API** in [Google Cloud Console](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com)
+
+3. **Configure environment variables**:
+   ```bash
+   ORDIN_GOOGLE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
+   ORDIN_GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
+   ORDIN_GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/api/v1/calendar/oauth/google/callback
+   ```
+
+### Calendar API Endpoints
+
+| Endpoint | Method | Description |
+| -------- | ------ | ----------- |
+| `/api/v1/calendar/oauth/{provider}/initiate` | GET | Start OAuth flow |
+| `/api/v1/calendar/oauth/{provider}/callback` | GET | OAuth callback |
+| `/api/v1/calendar/integrations` | GET | List all integrations |
+| `/api/v1/calendar/{provider}/status` | GET | Get integration status |
+| `/api/v1/calendar/{provider}/sync` | POST | Trigger calendar sync |
+| `/api/v1/calendar/{provider}` | DELETE | Disconnect integration |
+| `/api/v1/calendar/availability` | POST | Compute availability |
+
+### Firestore Structure
+
+```
+firestore/
+└── users/
+    └── {firebase_uid}/
+        ├── integrations/
+        │   └── calendar/
+        │       └── google/
+        │           └── state/          # OAuth tokens, sync metadata
+        │               ├── provider
+        │               ├── status
+        │               ├── access_token (encrypted at rest)
+        │               ├── refresh_token (encrypted at rest)
+        │               ├── token_expires_at
+        │               ├── scopes
+        │               ├── connected_at
+        │               ├── last_sync_at
+        │               └── sync_error
+        └── calendar_busy_blocks/
+            └── {block_id}/             # Deterministic hash
+                ├── provider
+                ├── calendar_id
+                ├── source_event_id
+                ├── start_time
+                ├── end_time
+                ├── block_type          # busy, tentative, focus
+                ├── is_all_day
+                └── synced_at
+```
+
+### OAuth Flow Example
+
+**1. Initiate OAuth**
+```bash
+curl -X GET http://localhost:8000/api/v1/calendar/oauth/google/initiate \
+  -H "Authorization: Bearer <firebase_id_token>"
+```
+
+Response:
+```json
+{
+  "auth_url": "https://accounts.google.com/o/oauth2/v2/auth?...",
+  "state": "abc123...",
+  "provider": "google"
+}
+```
+
+**2. Redirect user to `auth_url`**
+
+The frontend should:
+1. Store `state` in session storage
+2. Redirect user to `auth_url`
+3. User grants calendar access
+4. Google redirects to callback with `code` and `state`
+
+**3. Complete OAuth**
+```bash
+curl -X GET "http://localhost:8000/api/v1/calendar/oauth/google/callback?code=AUTH_CODE&state=abc123&expected_state=abc123" \
+  -H "Authorization: Bearer <firebase_id_token>"
+```
+
+### Calendar Sync
+
+```bash
+curl -X POST http://localhost:8000/api/v1/calendar/google/sync \
+  -H "Authorization: Bearer <firebase_id_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"days_ahead": 14, "calendar_id": "primary"}'
+```
+
+Response:
+```json
+{
+  "provider": "google",
+  "events_fetched": 15,
+  "blocks_created": 15,
+  "blocks_deleted": 2,
+  "sync_window_start": "2024-01-15T00:00:00Z",
+  "sync_window_end": "2024-01-29T00:00:00Z",
+  "synced_at": "2024-01-15T12:00:00Z"
+}
+```
+
+### Availability Computation
+
+Computes available time slots by subtracting busy blocks from the user's waking hours (based on preferences from A3).
+
+```bash
+curl -X POST http://localhost:8000/api/v1/calendar/availability \
+  -H "Authorization: Bearer <firebase_id_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "start_time": "2024-01-15T00:00:00Z",
+    "end_time": "2024-01-17T00:00:00Z",
+    "min_duration_minutes": 30,
+    "include_tentative_as_busy": false
+  }'
+```
+
+Response:
+```json
+{
+  "slots": [
+    {
+      "start_time": "2024-01-15T08:00:00-05:00",
+      "end_time": "2024-01-15T10:00:00-05:00",
+      "duration_minutes": 120
+    },
+    {
+      "start_time": "2024-01-15T14:00:00-05:00",
+      "end_time": "2024-01-15T17:00:00-05:00",
+      "duration_minutes": 180
+    }
+  ],
+  "start_time": "2024-01-15T00:00:00Z",
+  "end_time": "2024-01-17T00:00:00Z",
+  "timezone": "America/New_York",
+  "total_minutes_available": 300
+}
+```
+
+### Availability Algorithm
+
+1. **Generate waking hours** from user's `typical_wake_time` and `typical_sleep_time`
+2. **Filter by working days** from `preferred_working_days`
+3. **Subtract busy blocks** from connected calendars
+4. **Apply minimum duration** filter
+5. **Return available slots** in user's timezone
+
+### Error Handling
+
+| Status | Description | Action |
+| ------ | ----------- | ------ |
+| 400 | Calendar not connected | User needs to complete OAuth |
+| 401 | Token expired | Re-authenticate with OAuth |
+| 429 | Rate limited | Retry with exponential backoff |
+| 502 | Provider error | Retry later |
 
 ## Firebase Authentication
 

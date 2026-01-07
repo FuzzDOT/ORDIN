@@ -159,6 +159,22 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
+    # Google OAuth Configuration (for Calendar integration - A5)
+    # -------------------------------------------------------------------------
+    google_oauth_client_id: Optional[str] = Field(
+        default=None,
+        description="Google OAuth 2.0 client ID for Calendar API access.",
+    )
+    google_oauth_client_secret: Optional[str] = Field(
+        default=None,
+        description="Google OAuth 2.0 client secret.",
+    )
+    google_oauth_redirect_uri: str = Field(
+        default="http://localhost:8000/api/v1/calendar/oauth/google/callback",
+        description="OAuth callback URL for Google Calendar integration.",
+    )
+
+    # -------------------------------------------------------------------------
     # Validators
     # -------------------------------------------------------------------------
     @field_validator("debug", mode="after")
@@ -205,6 +221,20 @@ class Settings(BaseSettings):
                     "ORDIN_FIREBASE_PROJECT_ID is required when Firebase auth "
                     "is enabled in production"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_google_oauth_config(self) -> "Settings":
+        """
+        Validate Google OAuth configuration consistency.
+        
+        If client_id is provided, client_secret must also be provided.
+        """
+        if self.google_oauth_client_id and not self.google_oauth_client_secret:
+            raise ValueError(
+                "ORDIN_GOOGLE_OAUTH_CLIENT_SECRET is required when "
+                "ORDIN_GOOGLE_OAUTH_CLIENT_ID is provided"
+            )
         return self
 
     # -------------------------------------------------------------------------

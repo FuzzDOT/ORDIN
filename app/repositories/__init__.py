@@ -13,10 +13,20 @@ from app.repositories.task_repository import (
     TaskRepository,
     TaskRepositoryError,
 )
+from app.repositories.calendar_repository import (
+    CalendarRepository,
+    CalendarRepositoryError,
+    IntegrationNotFoundError,
+    get_calendar_repository,
+)
 
 __all__ = [
     "UserRepository",
     "TaskNotFoundError",
     "TaskRepository",
     "TaskRepositoryError",
+    "CalendarRepository",
+    "CalendarRepositoryError",
+    "IntegrationNotFoundError",
+    "get_calendar_repository",
 ]

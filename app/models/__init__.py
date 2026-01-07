@@ -364,6 +364,20 @@ from app.models.task import (
     TaskUpdate,
 )
 
+# Re-export calendar models for convenient imports (A5)
+from app.models.calendar import (
+    AvailabilityRequest,
+    AvailabilityResponse,
+    AvailabilitySlot,
+    BusyBlock,
+    BusyBlockType,
+    CalendarIntegration,
+    CalendarProvider,
+    CalendarSyncResult,
+    IntegrationStatus,
+    SyncWindow,
+)
+
 __all__ = [
     # User models
     "DayOfWeek",
@@ -381,4 +395,15 @@ __all__ = [
     "TaskListFilters",
     "TaskStatus",
     "TaskUpdate",
+    # Calendar models (A5)
+    "AvailabilityRequest",
+    "AvailabilityResponse",
+    "AvailabilitySlot",
+    "BusyBlock",
+    "BusyBlockType",
+    "CalendarIntegration",
+    "CalendarProvider",
+    "CalendarSyncResult",
+    "IntegrationStatus",
+    "SyncWindow",
 ]

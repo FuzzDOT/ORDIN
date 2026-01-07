@@ -22,3 +22,6 @@ anyio>=4.2.0,<5.0.0
 
 # Firebase Authentication
 firebase-admin>=6.4.0,<7.0.0
+
+# Timezone Support (for availability computation)
+pytz>=2024.1
