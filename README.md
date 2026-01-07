@@ -29,6 +29,9 @@ This service provides the foundational infrastructure for the ORDIN platform:
 - ✅ Automatic user_id injection in all logs for authenticated requests
 - ✅ Firestore user profile storage with auto-initialization
 - ✅ User preferences (timezone, schedule, focus blocks)
+- ✅ Task ingestion and validation with Firestore storage
+- ✅ Per-user task isolation via subcollection structure
+- ✅ Task filtering and pagination
 
 ## Project Structure
 
@@ -41,7 +44,8 @@ app/
 │   ├── health.py            # Health check endpoints
 │   └── v1/
 │       ├── __init__.py      # API v1 router aggregation
-│       └── users.py         # User profile endpoints
+│       ├── users.py         # User profile endpoints
+│       └── tasks.py         # Task CRUD endpoints
 ├── auth/
 │   ├── __init__.py          # Auth package exports
 │   ├── context.py           # UserContext model (immutable)
@@ -67,13 +71,16 @@ app/
 │   └── request_id.py        # Request ID generation
 ├── models/
 │   ├── __init__.py          # User profile & preferences models
+│   ├── task.py              # Task models (Task, TaskCreate, etc.)
 │   └── user.py              # Re-exports for convenience
 ├── repositories/
 │   ├── __init__.py          # Repository exports
-│   └── user_repository.py   # Firestore user data access
+│   ├── user_repository.py   # Firestore user data access
+│   └── task_repository.py   # Firestore task data access
 ├── services/
 │   ├── __init__.py          # Service exports
-│   └── user_service.py      # User profile service
+│   ├── user_service.py      # User profile service
+│   └── task_service.py      # Task service
 └── schemas/
     ├── __init__.py
     └── responses.py         # Pydantic response models
@@ -83,7 +90,8 @@ tests/
 ├── test_auth.py             # Authentication tests
 ├── test_health.py           # Health endpoint tests
 ├── test_exceptions.py       # Exception handling tests
-└── test_user_profile.py     # User profile tests
+├── test_user_profile.py     # User profile tests
+└── test_tasks.py            # Task model and service tests
 ```
 
 ## Quick Start
@@ -125,7 +133,7 @@ The API will be available at `http://localhost:8000`
 ### API Endpoints
 
 | Endpoint | Method | Description |
-|----------|--------|-------------|
+| -------- | ------ | ----------- |
 | `/health` | GET | Liveness probe - is the process alive? |
 | `/ready` | GET | Readiness probe - can we handle traffic? |
 | `/api/v1/users/me/profile` | GET | Get current user's profile |
@@ -133,6 +141,15 @@ The API will be available at `http://localhost:8000`
 | `/api/v1/users/me/preferences` | PATCH | Update preference fields |
 | `/api/v1/users/me/onboarding/complete` | POST | Mark onboarding complete |
 | `/api/v1/users/me/profile` | DELETE | Delete user profile |
+| `/api/v1/tasks` | POST | Create a new task |
+| `/api/v1/tasks` | GET | List tasks (with filters) |
+| `/api/v1/tasks/{task_id}` | GET | Get a specific task |
+| `/api/v1/tasks/{task_id}` | PATCH | Update task fields |
+| `/api/v1/tasks/{task_id}` | DELETE | Delete a task |
+| `/api/v1/tasks/{task_id}/complete` | POST | Mark task as done |
+| `/api/v1/tasks/{task_id}/start` | POST | Mark task as in progress |
+| `/api/v1/tasks/{task_id}/archive` | POST | Archive task (soft delete) |
+| `/api/v1/tasks/bulk/status` | POST | Bulk update task statuses |
 | `/docs` | GET | Swagger UI (dev mode only) |
 | `/redoc` | GET | ReDoc documentation (dev mode only) |
 
@@ -283,6 +300,240 @@ Valid values: `25` (short), `45` (medium), `60` (long), `90` (extended)
 ### Days of Week
 
 Valid values: `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`
+
+## Task Ingestion & Validation
+
+Tasks are the core work items in ORDIN. This layer handles ingestion, validation, and state management only—no prioritization, scoring, or scheduling logic.
+
+### Task Data Model
+
+```python
+Task:
+  task_id: str              # UUID (auto-generated)
+  user_id: str              # Firebase UID (owner)
+  title: str                # 1-256 characters (required)
+  description: str | None   # Up to 4096 characters
+  domain: TaskDomain        # Category (see below)
+  deadline: datetime        # ISO 8601 (required)
+  effort_estimate_minutes: int | None  # 1-1440 (24 hours max)
+  importance: int           # 1-5 scale (default: 3)
+  constraints: TaskConstraints | None  # Scheduling hints
+  status: TaskStatus        # Lifecycle state
+  created_at: datetime      # Auto-set
+  updated_at: datetime      # Auto-updated
+
+TaskConstraints:
+  earliest_start: datetime | None      # Don't start before this time
+  must_be_single_block: bool           # Complete in one session (default: false)
+  preferred_time_of_day: str | None    # "morning", "afternoon", "evening"
+  location_bound: str | None           # e.g., "office", "home" (max 64 chars)
+```
+
+### Task Domains
+
+| Value | Description |
+| ----- | ----------- |
+| `work` | Professional/job-related tasks |
+| `personal` | Personal life tasks |
+| `admin` | Administrative tasks (bills, paperwork) |
+| `health` | Health and fitness tasks |
+| `learning` | Education and skill development |
+| `social` | Social commitments |
+| `creative` | Creative projects |
+| `other` | Uncategorized (default) |
+
+### Task Statuses
+
+| Value | Description |
+| ----- | ----------- |
+| `pending` | Created but not started (default) |
+| `in_progress` | Currently being worked on |
+| `done` | Completed successfully |
+| `archived` | No longer active (soft delete) |
+
+### Firestore Collection Structure
+
+Tasks are stored in per-user subcollections for strict isolation:
+
+```text
+firestore/
+└── users/                    # Collection
+    └── {firebase_uid}/       # Document
+        └── tasks/            # Subcollection
+            └── {task_id}/    # Document (UUID)
+                ├── task_id
+                ├── user_id
+                ├── title
+                ├── description
+                ├── domain
+                ├── deadline
+                ├── effort_estimate_minutes
+                ├── importance
+                ├── constraints {
+                │     earliest_start
+                │     must_be_single_block
+                │     preferred_time_of_day
+                │     location_bound
+                │   }
+                ├── status
+                ├── created_at
+                └── updated_at
+```
+
+### Firestore Indexing
+
+For efficient queries, create composite indexes:
+
+```text
+Collection: users/{uid}/tasks
+  - (status ASC, deadline ASC)
+  - (domain ASC, deadline ASC)
+  - (deadline ASC)
+```
+
+### Task API Examples
+
+#### Create a Task
+
+```bash
+curl -X POST http://localhost:8000/api/v1/tasks \
+  -H "Authorization: Bearer <firebase_id_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Complete project proposal",
+    "description": "Draft and review the Q2 project proposal",
+    "domain": "work",
+    "deadline": "2026-01-15T17:00:00Z",
+    "effort_estimate_minutes": 120,
+    "importance": 4,
+    "constraints": {
+      "must_be_single_block": true,
+      "preferred_time_of_day": "morning"
+    }
+  }'
+```
+
+Response (201 Created):
+```json
+{
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "Complete project proposal",
+  "description": "Draft and review the Q2 project proposal",
+  "domain": "work",
+  "deadline": "2026-01-15T17:00:00+00:00",
+  "effort_estimate_minutes": 120,
+  "importance": 4,
+  "constraints": {
+    "earliest_start": null,
+    "must_be_single_block": true,
+    "preferred_time_of_day": "morning",
+    "location_bound": null
+  },
+  "status": "pending",
+  "created_at": "2026-01-07T10:30:00+00:00",
+  "updated_at": "2026-01-07T10:30:00+00:00"
+}
+```
+
+#### List Tasks with Filters
+
+```bash
+# List pending tasks due this week
+curl -X GET "http://localhost:8000/api/v1/tasks?status=pending&deadline_before=2026-01-14T23:59:59Z&limit=20" \
+  -H "Authorization: Bearer <firebase_id_token>"
+```
+
+Response:
+```json
+{
+  "tasks": [
+    {
+      "task_id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Complete project proposal",
+      "domain": "work",
+      "deadline": "2026-01-15T17:00:00+00:00",
+      "importance": 4,
+      "status": "pending",
+      ...
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+#### Get a Specific Task
+
+```bash
+curl -X GET http://localhost:8000/api/v1/tasks/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer <firebase_id_token>"
+```
+
+#### Update a Task (PATCH)
+
+Only provided fields are updated; others remain unchanged:
+
+```bash
+curl -X PATCH http://localhost:8000/api/v1/tasks/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer <firebase_id_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "importance": 5,
+    "deadline": "2026-01-14T12:00:00Z"
+  }'
+```
+
+#### Complete a Task
+
+```bash
+curl -X POST http://localhost:8000/api/v1/tasks/550e8400-e29b-41d4-a716-446655440000/complete \
+  -H "Authorization: Bearer <firebase_id_token>"
+```
+
+#### Delete a Task
+
+```bash
+curl -X DELETE http://localhost:8000/api/v1/tasks/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer <firebase_id_token>"
+```
+
+Response: 204 No Content
+
+#### Bulk Update Status
+
+```bash
+curl -X POST http://localhost:8000/api/v1/tasks/bulk/status \
+  -H "Authorization: Bearer <firebase_id_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task_ids": [
+      "550e8400-e29b-41d4-a716-446655440000",
+      "660e8400-e29b-41d4-a716-446655440001"
+    ],
+    "status": "archived"
+  }'
+```
+
+### Task Validation Rules
+
+| Field | Validation |
+| ----- | ---------- |
+| `title` | Required, 1-256 characters |
+| `description` | Optional, max 4096 characters |
+| `deadline` | Required, ISO 8601 datetime |
+| `importance` | Integer 1-5 (default: 3) |
+| `effort_estimate_minutes` | Optional, 1-1440 |
+| `constraints.earliest_start` | Must be before deadline if set |
+| `constraints.preferred_time_of_day` | Must be "morning", "afternoon", or "evening" |
+| `constraints.location_bound` | Max 64 characters |
+
+### Delete Behavior
+
+- **Hard delete**: `DELETE /api/v1/tasks/{task_id}` permanently removes the task
+- **Soft delete**: `POST /api/v1/tasks/{task_id}/archive` sets status to `archived`
+
+Use archived status for tasks you want to preserve for history/analytics.
 
 ## Firebase Authentication
 
@@ -619,12 +870,13 @@ All errors follow a consistent format:
 
 This skeleton is prepared for:
 
-- **Task Management**: CRUD operations for tasks and scheduling
 - **AI Integration**: LLM-based scheduling and prioritization
 - **External Services**: Service availability checks in readiness probe
 - **Authorization**: Role-based access control building on `UserContext`
 - **Token Refresh**: Background token refresh for long-running operations
 - **Notifications**: Push notifications based on user preferences
+- **Task Scheduling**: Intelligent scheduling based on task constraints and user preferences
+- **Calendar Integration**: Sync with external calendars
 
 ## License
 

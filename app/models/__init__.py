@@ -351,3 +351,34 @@ class UserPreferencesUpdate(BaseModel):
         default=None,
         description="Quiet hours end",
     )
+
+
+# Re-export task models for convenient imports
+from app.models.task import (
+    Task,
+    TaskConstraints,
+    TaskCreate,
+    TaskDomain,
+    TaskListFilters,
+    TaskStatus,
+    TaskUpdate,
+)
+
+__all__ = [
+    # User models
+    "DayOfWeek",
+    "FocusBlockLength",
+    "TimeOfDay",
+    "UserPreferences",
+    "UserPreferencesUpdate",
+    "UserProfile",
+    "UserProfileUpdate",
+    # Task models
+    "Task",
+    "TaskConstraints",
+    "TaskCreate",
+    "TaskDomain",
+    "TaskListFilters",
+    "TaskStatus",
+    "TaskUpdate",
+]

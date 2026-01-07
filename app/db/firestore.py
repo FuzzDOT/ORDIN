@@ -82,6 +82,10 @@ class FirestoreClient:
         """Get a reference to a document."""
         return self._client.document(document_path)
 
+    def batch(self):
+        """Create a write batch for atomic operations."""
+        return self._client.batch()
+
 
 def initialize_firestore(
     project_id: Optional[str] = None,
