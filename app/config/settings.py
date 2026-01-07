@@ -151,6 +151,14 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
+    # Firestore Configuration
+    # -------------------------------------------------------------------------
+    firestore_emulator_host: Optional[str] = Field(
+        default=None,
+        description="Firestore Emulator host for local development (e.g., localhost:8080).",
+    )
+
+    # -------------------------------------------------------------------------
     # Validators
     # -------------------------------------------------------------------------
     @field_validator("debug", mode="after")

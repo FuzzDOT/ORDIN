@@ -27,6 +27,8 @@ This service provides the foundational infrastructure for the ORDIN platform:
 - ✅ Latency logging for all requests
 - ✅ Firebase Authentication (ID token verification)
 - ✅ Automatic user_id injection in all logs for authenticated requests
+- ✅ Firestore user profile storage with auto-initialization
+- ✅ User preferences (timezone, schedule, focus blocks)
 
 ## Project Structure
 
@@ -36,7 +38,10 @@ app/
 ├── main.py                  # FastAPI application factory
 ├── api/
 │   ├── __init__.py
-│   └── health.py            # Health check endpoints
+│   ├── health.py            # Health check endpoints
+│   └── v1/
+│       ├── __init__.py      # API v1 router aggregation
+│       └── users.py         # User profile endpoints
 ├── auth/
 │   ├── __init__.py          # Auth package exports
 │   ├── context.py           # UserContext model (immutable)
@@ -53,10 +58,22 @@ app/
 │   ├── exceptions.py        # Typed exception hierarchy
 │   ├── handlers.py          # Global exception handlers
 │   └── logging.py           # Structured logging setup
+├── db/
+│   ├── __init__.py          # Database package exports
+│   └── firestore.py         # Firestore client initialization
 ├── middleware/
 │   ├── __init__.py
 │   ├── logging.py           # Request/response logging
 │   └── request_id.py        # Request ID generation
+├── models/
+│   ├── __init__.py          # User profile & preferences models
+│   └── user.py              # Re-exports for convenience
+├── repositories/
+│   ├── __init__.py          # Repository exports
+│   └── user_repository.py   # Firestore user data access
+├── services/
+│   ├── __init__.py          # Service exports
+│   └── user_service.py      # User profile service
 └── schemas/
     ├── __init__.py
     └── responses.py         # Pydantic response models
@@ -65,7 +82,8 @@ tests/
 ├── conftest.py              # Pytest fixtures
 ├── test_auth.py             # Authentication tests
 ├── test_health.py           # Health endpoint tests
-└── test_exceptions.py       # Exception handling tests
+├── test_exceptions.py       # Exception handling tests
+└── test_user_profile.py     # User profile tests
 ```
 
 ## Quick Start
@@ -110,6 +128,11 @@ The API will be available at `http://localhost:8000`
 |----------|--------|-------------|
 | `/health` | GET | Liveness probe - is the process alive? |
 | `/ready` | GET | Readiness probe - can we handle traffic? |
+| `/api/v1/users/me/profile` | GET | Get current user's profile |
+| `/api/v1/users/me/profile` | PATCH | Update profile fields |
+| `/api/v1/users/me/preferences` | PATCH | Update preference fields |
+| `/api/v1/users/me/onboarding/complete` | POST | Mark onboarding complete |
+| `/api/v1/users/me/profile` | DELETE | Delete user profile |
 | `/docs` | GET | Swagger UI (dev mode only) |
 | `/redoc` | GET | ReDoc documentation (dev mode only) |
 
@@ -135,9 +158,131 @@ Configuration is managed via environment variables with the `ORDIN_` prefix.
 | `ORDIN_FIREBASE_AUTH_ENABLED` | `true` | Enable/disable Firebase auth |
 | `ORDIN_FIREBASE_PROJECT_ID` | - | Firebase project ID (required in prod) |
 | `ORDIN_FIREBASE_CREDENTIALS_PATH` | - | Path to service account JSON |
-| `ORDIN_FIREBASE_AUTH_EMULATOR_HOST` | - | Emulator host for local dev |
+| `ORDIN_FIREBASE_AUTH_EMULATOR_HOST` | - | Auth emulator host for local dev |
+
+### Firestore Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ORDIN_FIRESTORE_EMULATOR_HOST` | - | Firestore emulator host for local dev |
 
 See [.env.example](.env.example) for all available options.
+
+## User Profile & Preferences
+
+User profiles are stored in Firestore and auto-initialized on first access.
+
+### Data Model
+
+```python
+UserProfile:
+  uid: str                    # Firebase UID (document ID)
+  email: str | None           # Cached from Firebase
+  display_name: str | None    # User's display name
+  preferences: UserPreferences
+  onboarding_completed: bool  # Default: false
+  created_at: datetime        # Auto-set
+  updated_at: datetime        # Auto-updated
+  schema_version: int         # Default: 1
+
+UserPreferences:
+  timezone: str               # IANA timezone (default: "UTC")
+  typical_wake_time: TimeOfDay    # Default: 07:00
+  typical_sleep_time: TimeOfDay   # Default: 23:00
+  preferred_focus_block_lengths: list[int]  # Default: [45]
+  preferred_working_days: list[str]         # Default: Mon-Fri
+  notifications_enabled: bool               # Default: true
+  quiet_hours_start: TimeOfDay | None
+  quiet_hours_end: TimeOfDay | None
+```
+
+### Firestore Collection Structure
+
+```
+firestore/
+└── users/                    # Collection
+    └── {firebase_uid}/       # Document (auto-created on first access)
+        ├── uid
+        ├── email
+        ├── display_name
+        ├── preferences {
+        │     timezone
+        │     typical_wake_time { hour, minute }
+        │     typical_sleep_time { hour, minute }
+        │     preferred_focus_block_lengths []
+        │     preferred_working_days []
+        │     notifications_enabled
+        │     quiet_hours_start
+        │     quiet_hours_end
+        │   }
+        ├── onboarding_completed
+        ├── created_at
+        ├── updated_at
+        └── schema_version
+```
+
+### API Examples
+
+#### Get Profile
+
+```bash
+curl -X GET http://localhost:8000/api/v1/users/me/profile \
+  -H "Authorization: Bearer <firebase_id_token>"
+```
+
+Response:
+```json
+{
+  "uid": "firebase-uid-123",
+  "email": "user@example.com",
+  "display_name": null,
+  "preferences": {
+    "timezone": "UTC",
+    "typical_wake_time": {"hour": 7, "minute": 0},
+    "typical_sleep_time": {"hour": 23, "minute": 0},
+    "preferred_focus_block_lengths": [45],
+    "preferred_working_days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    "notifications_enabled": true,
+    "quiet_hours_start": null,
+    "quiet_hours_end": null
+  },
+  "onboarding_completed": false,
+  "created_at": "2026-01-06T12:00:00Z",
+  "updated_at": "2026-01-06T12:00:00Z",
+  "schema_version": 1
+}
+```
+
+#### Update Profile
+
+```bash
+curl -X PATCH http://localhost:8000/api/v1/users/me/profile \
+  -H "Authorization: Bearer <firebase_id_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"display_name": "John Doe"}'
+```
+
+#### Update Preferences
+
+```bash
+curl -X PATCH http://localhost:8000/api/v1/users/me/preferences \
+  -H "Authorization: Bearer <firebase_id_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timezone": "America/New_York",
+    "typical_wake_time": {"hour": 6, "minute": 30},
+    "preferred_focus_block_lengths": [25, 45, 60],
+    "preferred_working_days": ["monday", "tuesday", "wednesday", "thursday"]
+  }'
+```
+
+### Focus Block Lengths
+
+Valid values: `25` (short), `45` (medium), `60` (long), `90` (extended)
+
+### Days of Week
+
+Valid values: `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`
 
 ## Firebase Authentication
 
@@ -277,23 +422,26 @@ ORDIN_FIREBASE_AUTH_ENABLED=false
 
 #### Option 2: Firebase Emulator
 
-Use [Firebase Emulator Suite](https://firebase.google.com/docs/emulator-suite) for local development with auth:
+Use [Firebase Emulator Suite](https://firebase.google.com/docs/emulator-suite) for local development with auth and Firestore:
 
 ```bash
 # Install Firebase CLI
 npm install -g firebase-tools
 
-# Initialize emulators
+# Initialize emulators (select Auth and Firestore)
 firebase init emulators
 
-# Start Auth emulator
-firebase emulators:start --only auth
+# Start emulators
+firebase emulators:start --only auth,firestore
 
 # In .env
 ORDIN_FIREBASE_AUTH_ENABLED=true
 ORDIN_FIREBASE_PROJECT_ID=your-project-id
 ORDIN_FIREBASE_AUTH_EMULATOR_HOST=localhost:9099
+ORDIN_FIRESTORE_EMULATOR_HOST=localhost:8080
 ```
+
+The Firestore emulator UI is available at `http://localhost:4000` (default).
 
 #### Option 3: Real Firebase (Test Project)
 
@@ -471,11 +619,12 @@ All errors follow a consistent format:
 
 This skeleton is prepared for:
 
-- **Database**: Readiness check placeholder in `app/api/health.py`
+- **Task Management**: CRUD operations for tasks and scheduling
+- **AI Integration**: LLM-based scheduling and prioritization
 - **External Services**: Service availability checks in readiness probe
-- **Business Logic**: API router mounting in `app/main.py`
 - **Authorization**: Role-based access control building on `UserContext`
 - **Token Refresh**: Background token refresh for long-running operations
+- **Notifications**: Push notifications based on user preferences
 
 ## License
 

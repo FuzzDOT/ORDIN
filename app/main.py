@@ -10,6 +10,7 @@ This module creates and configures the FastAPI application with:
 - CORS configuration
 - Lifespan management (startup/shutdown)
 - Firebase Admin SDK initialization
+- Firestore client initialization
 
 The application follows the factory pattern to support testing
 and multiple configuration scenarios.
@@ -22,11 +23,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import health_router
+from app.api.v1 import router as api_v1_router
 from app.auth.firebase import FirebaseInitializationError, initialize_firebase
 from app.auth.middleware import FirebaseAuthMiddleware
 from app.config import get_settings
 from app.core.handlers import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
+from app.db import FirestoreError, initialize_firestore
 from app.middleware import RequestIdMiddleware, RequestLoggingMiddleware
 
 
@@ -75,6 +78,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 emulator_host=settings.firebase_auth_emulator_host,
             )
             logger.info("Firebase Admin SDK initialized successfully")
+            
+            # Initialize Firestore client (reuses Firebase Admin credentials)
+            try:
+                initialize_firestore(
+                    project_id=settings.firebase_project_id,
+                    emulator_host=settings.firestore_emulator_host,
+                )
+                logger.info("Firestore client initialized successfully")
+            except FirestoreError as e:
+                if settings.is_production:
+                    logger.critical(
+                        "Firestore initialization failed in production",
+                        error=str(e),
+                    )
+                    raise
+                else:
+                    logger.warning(
+                        "Firestore initialization failed - data storage will not work",
+                        error=str(e),
+                    )
+                    
         except FirebaseInitializationError as e:
             # In production, Firebase initialization failure is fatal
             if settings.is_production:
@@ -166,8 +190,8 @@ def create_application() -> FastAPI:
     # Health check endpoints (no prefix, root-level)
     app.include_router(health_router)
 
-    # API v1 routes (placeholder for future business logic)
-    # app.include_router(api_v1_router, prefix="/api/v1")
+    # API v1 routes (authenticated endpoints)
+    app.include_router(api_v1_router)
 
     return app
 
