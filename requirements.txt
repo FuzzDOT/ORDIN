@@ -19,3 +19,6 @@ httpx>=0.26.0,<1.0.0
 
 # Async Support
 anyio>=4.2.0,<5.0.0
+
+# Firebase Authentication
+firebase-admin>=6.4.0,<7.0.0

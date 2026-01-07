@@ -13,9 +13,9 @@ The application will fail to start if required configuration is missing or inval
 
 from enum import Enum
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -131,6 +131,26 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
+    # Firebase Authentication Configuration
+    # -------------------------------------------------------------------------
+    firebase_auth_enabled: bool = Field(
+        default=True,
+        description="Enable Firebase authentication. Disable for local dev without auth.",
+    )
+    firebase_project_id: Optional[str] = Field(
+        default=None,
+        description="Firebase project ID. Required when firebase_auth_enabled=True in prod.",
+    )
+    firebase_credentials_path: Optional[str] = Field(
+        default=None,
+        description="Path to Firebase service account JSON. If None, uses ADC.",
+    )
+    firebase_auth_emulator_host: Optional[str] = Field(
+        default=None,
+        description="Firebase Auth Emulator host for local development (e.g., localhost:9099).",
+    )
+
+    # -------------------------------------------------------------------------
     # Validators
     # -------------------------------------------------------------------------
     @field_validator("debug", mode="after")
@@ -162,6 +182,22 @@ class Settings(BaseSettings):
         if normalized not in valid_formats:
             raise ValueError(f"Invalid log format: {v}. Must be one of {valid_formats}")
         return normalized
+
+    @model_validator(mode="after")
+    def validate_firebase_config(self) -> "Settings":
+        """
+        Validate Firebase configuration for production environments.
+        
+        SECURITY: In production, Firebase must be properly configured.
+        This fail-fast validation prevents deploying with missing auth config.
+        """
+        if self.env == Environment.PROD and self.firebase_auth_enabled:
+            if not self.firebase_project_id:
+                raise ValueError(
+                    "ORDIN_FIREBASE_PROJECT_ID is required when Firebase auth "
+                    "is enabled in production"
+                )
+        return self
 
     # -------------------------------------------------------------------------
     # Computed Properties

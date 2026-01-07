@@ -6,6 +6,7 @@ Production-grade JSON logging with automatic context enrichment.
 Features:
 - Structured JSON output for log aggregation (ELK, Datadog, etc.)
 - Automatic request_id injection from context
+- Automatic user_id injection for authenticated requests
 - Configurable log levels per environment
 - Human-readable format option for local development
 """
@@ -18,7 +19,7 @@ from typing import Any, Optional
 import structlog
 from structlog.types import Processor
 
-from app.core.context import get_request_id
+from app.core.context import get_request_id, get_user_id
 
 
 def add_request_id(
@@ -35,6 +36,23 @@ def add_request_id(
     request_id = get_request_id()
     if request_id:
         event_dict["request_id"] = request_id
+    return event_dict
+
+
+def add_user_id(
+    logger: logging.Logger,
+    method_name: str,
+    event_dict: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Structlog processor to inject user_id from context.
+    
+    This processor runs for every log call, automatically adding
+    the user_id if one is set (i.e., for authenticated requests).
+    """
+    user_id = get_user_id()
+    if user_id:
+        event_dict["user_id"] = user_id
     return event_dict
 
 
@@ -94,6 +112,7 @@ def setup_logging(
         structlog.stdlib.add_logger_name,
         add_timestamp,
         add_request_id,
+        add_user_id,
         add_service_context,
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.StackInfoRenderer(),

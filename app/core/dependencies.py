@@ -11,6 +11,8 @@ Design principles:
 - Dependencies should be stateless or use proper scoping
 - Heavy initialization should use lifespan events, not dependencies
 - Dependencies can depend on other dependencies (dependency tree)
+
+For authentication dependencies, see app.auth.dependencies.
 """
 
 from typing import Annotated, Optional
@@ -52,47 +54,3 @@ def get_current_settings() -> Settings:
 # Type aliases for cleaner dependency injection syntax
 SettingsDep = Annotated[Settings, Depends(get_current_settings)]
 RequestIdDep = Annotated[Optional[str], Depends(get_request_id)]
-
-
-# Placeholder for user context (to be implemented with Firebase integration)
-class UserContext:
-    """
-    Placeholder for authenticated user context.
-    
-    This will be populated by Firebase auth middleware in the future.
-    For now, it serves as a contract for downstream code.
-    """
-
-    def __init__(
-        self,
-        user_id: Optional[str] = None,
-        email: Optional[str] = None,
-        is_authenticated: bool = False,
-    ) -> None:
-        self.user_id = user_id
-        self.email = email
-        self.is_authenticated = is_authenticated
-
-
-async def get_user_context(request: Request) -> UserContext:
-    """
-    Extract user context from request (placeholder for Firebase auth).
-    
-    Currently returns an unauthenticated context.
-    Will be updated when Firebase auth is integrated.
-    
-    Usage:
-        @router.get("/protected")
-        async def protected(user: Annotated[UserContext, Depends(get_user_context)]):
-            if not user.is_authenticated:
-                raise HTTPException(401, "Authentication required")
-    """
-    # Future implementation will extract Firebase token and validate
-    return UserContext(
-        user_id=None,
-        email=None,
-        is_authenticated=False,
-    )
-
-
-UserContextDep = Annotated[UserContext, Depends(get_user_context)]

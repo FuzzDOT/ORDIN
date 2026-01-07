@@ -4,11 +4,12 @@ FastAPI Application Factory
 Main application entry point with production-ready configuration.
 
 This module creates and configures the FastAPI application with:
-- Middleware stack (request ID, logging)
+- Middleware stack (request ID, logging, authentication)
 - Exception handlers
 - API routers
 - CORS configuration
 - Lifespan management (startup/shutdown)
+- Firebase Admin SDK initialization
 
 The application follows the factory pattern to support testing
 and multiple configuration scenarios.
@@ -21,6 +22,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import health_router
+from app.auth.firebase import FirebaseInitializationError, initialize_firebase
+from app.auth.middleware import FirebaseAuthMiddleware
 from app.config import get_settings
 from app.core.handlers import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
@@ -35,7 +38,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Startup:
     - Initialize logging
     - Validate configuration (fail-fast)
-    - Connect to external services (future)
+    - Initialize Firebase Admin SDK
     
     Shutdown:
     - Close database connections (future)
@@ -45,7 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # --- STARTUP ---
     settings = get_settings()
     
-    # Initialize structured logging
+    # Initialize structured logging first (so we can log startup events)
     setup_logging(
         log_level=settings.log_level,
         log_format=settings.log_format,
@@ -60,10 +63,36 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         environment=settings.env.value,
         host=settings.host,
         port=settings.port,
+        firebase_auth_enabled=settings.firebase_auth_enabled,
     )
     
+    # Initialize Firebase Admin SDK if authentication is enabled
+    if settings.firebase_auth_enabled:
+        try:
+            initialize_firebase(
+                project_id=settings.firebase_project_id,
+                credentials_path=settings.firebase_credentials_path,
+                emulator_host=settings.firebase_auth_emulator_host,
+            )
+            logger.info("Firebase Admin SDK initialized successfully")
+        except FirebaseInitializationError as e:
+            # In production, Firebase initialization failure is fatal
+            if settings.is_production:
+                logger.critical(
+                    "Firebase initialization failed in production",
+                    error=str(e),
+                )
+                raise
+            else:
+                # In dev/staging, log warning and continue (auth will fail gracefully)
+                logger.warning(
+                    "Firebase initialization failed - auth will not work",
+                    error=str(e),
+                )
+    else:
+        logger.info("Firebase authentication is disabled")
+    
     # Validate configuration (fail-fast on misconfiguration)
-    # Any validation errors will raise before the yield, preventing startup
     if settings.is_production:
         logger.info("Running in production mode with strict settings")
     
@@ -114,7 +143,15 @@ def create_application() -> FastAPI:
     # Request logging middleware (logs after request completes)
     app.add_middleware(RequestLoggingMiddleware)
 
-    # Request ID middleware (must be before logging to ensure ID is available)
+    # Firebase authentication middleware (verifies tokens, sets user context)
+    # Protected paths can be configured here, or use route-level dependencies
+    app.add_middleware(
+        FirebaseAuthMiddleware,
+        protected_paths={"/api/v1"},  # Add path prefixes that require auth
+        auth_enabled=settings.firebase_auth_enabled,
+    )
+
+    # Request ID middleware (must be before auth to ensure ID is available for logging)
     app.add_middleware(RequestIdMiddleware)
 
     # -------------------------------------------------------------------------
