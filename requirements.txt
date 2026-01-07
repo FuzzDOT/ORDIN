@@ -1,0 +1,21 @@
+# ORDIN Backend - Python Dependencies
+# =====================================
+# Production dependencies for the FastAPI backend service.
+# Install with: pip install -r requirements.txt
+
+# Web Framework
+fastapi>=0.109.0,<1.0.0
+uvicorn[standard]>=0.27.0,<1.0.0
+
+# Data Validation & Settings
+pydantic>=2.5.0,<3.0.0
+pydantic-settings>=2.1.0,<3.0.0
+
+# Structured Logging
+structlog>=24.1.0,<25.0.0
+
+# HTTP Client (for future external API calls)
+httpx>=0.26.0,<1.0.0
+
+# Async Support
+anyio>=4.2.0,<5.0.0
