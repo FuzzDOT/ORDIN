@@ -598,9 +598,3 @@ ORDIN is architected to support future:
 - adaptive planning
 - optimization pipelines
 - intelligent calendar negotiation
-
----
-
-# License
-
-MIT
