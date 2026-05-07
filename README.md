@@ -87,7 +87,6 @@ The backend is intentionally designed to support future:
 
 # Architecture Overview
 
-```text
 Client
    │
    ▼
@@ -192,9 +191,10 @@ tests/
 # Quick Start
 
 ## Prerequisites
-
+```bash
 * Python 3.11 or 3.12
 * pip or uv
+```
 
 ---
 
@@ -601,12 +601,3 @@ ORDIN is architected to support future:
 * adaptive planning
 * optimization pipelines
 * intelligent calendar negotiation
-
----
-
-# License
-
-MIT
-
-```
-```
