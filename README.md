@@ -87,6 +87,7 @@ The backend is intentionally designed to support future:
 
 # Architecture Overview
 
+```text
 Client
    │
    ▼
@@ -115,11 +116,13 @@ External Systems
    ├── Firebase Auth
    ├── Google Calendar
    └── Firestore
+```
 
 ---
 
 # Project Structure
 
+```text
 app/
 ├── __init__.py
 ├── main.py
@@ -185,16 +188,16 @@ tests/
 ├── test_user_profile.py
 ├── test_tasks.py
 └── test_calendar.py
+```
 
 ---
 
 # Quick Start
 
 ## Prerequisites
-```bash
-* Python 3.11 or 3.12
-* pip or uv
-```
+
+- Python 3.11 or 3.12
+- pip or uv
 
 ---
 
@@ -243,32 +246,32 @@ http://localhost:8000
 
 # API Endpoints
 
-| Endpoint                                     | Method | Description              |
-| -------------------------------------------- | ------ | ------------------------ |
-| `/health`                                    | GET    | Liveness probe           |
-| `/ready`                                     | GET    | Readiness probe          |
-| `/api/v1/users/me/profile`                   | GET    | Get current user profile |
-| `/api/v1/users/me/profile`                   | PATCH  | Update profile           |
-| `/api/v1/users/me/preferences`               | PATCH  | Update preferences       |
-| `/api/v1/users/me/onboarding/complete`       | POST   | Complete onboarding      |
-| `/api/v1/users/me/profile`                   | DELETE | Delete profile           |
-| `/api/v1/tasks`                              | POST   | Create task              |
-| `/api/v1/tasks`                              | GET    | List tasks               |
-| `/api/v1/tasks/{task_id}`                    | GET    | Get task                 |
-| `/api/v1/tasks/{task_id}`                    | PATCH  | Update task              |
-| `/api/v1/tasks/{task_id}`                    | DELETE | Delete task              |
-| `/api/v1/tasks/{task_id}/complete`           | POST   | Complete task            |
-| `/api/v1/tasks/{task_id}/start`              | POST   | Start task               |
-| `/api/v1/tasks/{task_id}/archive`            | POST   | Archive task             |
-| `/api/v1/tasks/bulk/status`                  | POST   | Bulk update task status  |
-| `/api/v1/calendar/oauth/{provider}/initiate` | GET    | Start OAuth              |
-| `/api/v1/calendar/oauth/{provider}/callback` | GET    | OAuth callback           |
-| `/api/v1/calendar/integrations`              | GET    | List integrations        |
-| `/api/v1/calendar/{provider}/sync`           | POST   | Sync calendar            |
-| `/api/v1/calendar/{provider}`                | DELETE | Disconnect calendar      |
-| `/api/v1/calendar/availability`              | POST   | Compute availability     |
-| `/docs`                                      | GET    | Swagger UI               |
-| `/redoc`                                     | GET    | ReDoc documentation      |
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | Liveness probe |
+| `/ready` | GET | Readiness probe |
+| `/api/v1/users/me/profile` | GET | Get current user profile |
+| `/api/v1/users/me/profile` | PATCH | Update profile |
+| `/api/v1/users/me/preferences` | PATCH | Update preferences |
+| `/api/v1/users/me/onboarding/complete` | POST | Complete onboarding |
+| `/api/v1/users/me/profile` | DELETE | Delete profile |
+| `/api/v1/tasks` | POST | Create task |
+| `/api/v1/tasks` | GET | List tasks |
+| `/api/v1/tasks/{task_id}` | GET | Get task |
+| `/api/v1/tasks/{task_id}` | PATCH | Update task |
+| `/api/v1/tasks/{task_id}` | DELETE | Delete task |
+| `/api/v1/tasks/{task_id}/complete` | POST | Complete task |
+| `/api/v1/tasks/{task_id}/start` | POST | Start task |
+| `/api/v1/tasks/{task_id}/archive` | POST | Archive task |
+| `/api/v1/tasks/bulk/status` | POST | Bulk update task status |
+| `/api/v1/calendar/oauth/{provider}/initiate` | GET | Start OAuth |
+| `/api/v1/calendar/oauth/{provider}/callback` | GET | OAuth callback |
+| `/api/v1/calendar/integrations` | GET | List integrations |
+| `/api/v1/calendar/{provider}/sync` | POST | Sync calendar |
+| `/api/v1/calendar/{provider}` | DELETE | Disconnect calendar |
+| `/api/v1/calendar/availability` | POST | Compute availability |
+| `/docs` | GET | Swagger UI |
+| `/redoc` | GET | ReDoc documentation |
 
 ---
 
@@ -385,13 +388,11 @@ Task:
 ORDIN integrates with external calendars to compute availability.
 
 Current support:
-
-* Google Calendar
+- Google Calendar
 
 Planned support:
-
-* Apple Calendar
-* Microsoft Outlook
+- Apple Calendar
+- Microsoft Outlook
 
 ---
 
@@ -400,17 +401,15 @@ Planned support:
 ORDIN follows a privacy-first architecture.
 
 Stored:
-
-* Busy/free block information
-* Time ranges
-* Availability windows
+- Busy/free block information
+- Time ranges
+- Availability windows
 
 Never stored:
-
-* Event titles
-* Descriptions
-* Attendees
-* Meeting metadata
+- Event titles
+- Descriptions
+- Attendees
+- Meeting metadata
 
 This allows scheduling computation while preserving user privacy.
 
@@ -470,13 +469,13 @@ Environment variables use the `ORDIN_` prefix.
 
 ## Core Settings
 
-| Variable           | Description    |
-| ------------------ | -------------- |
-| `ORDIN_ENV`        | Environment    |
-| `ORDIN_DEBUG`      | Debug mode     |
-| `ORDIN_HOST`       | Host           |
-| `ORDIN_PORT`       | Port           |
-| `ORDIN_LOG_LEVEL`  | Log level      |
+| Variable | Description |
+|---|---|
+| `ORDIN_ENV` | Environment |
+| `ORDIN_DEBUG` | Debug mode |
+| `ORDIN_HOST` | Host |
+| `ORDIN_PORT` | Port |
+| `ORDIN_LOG_LEVEL` | Log level |
 | `ORDIN_LOG_FORMAT` | Logging format |
 
 ---
@@ -504,10 +503,9 @@ docker run -p 8000:8000 \
 # Kubernetes
 
 ORDIN includes:
-
-* liveness probes,
-* readiness probes,
-* containerized deployment support.
+- liveness probes,
+- readiness probes,
+- containerized deployment support.
 
 Example:
 
@@ -577,27 +575,32 @@ Example error format:
 
 # Error Codes
 
-| Code                  | HTTP Status | Description              |
-| --------------------- | ----------- | ------------------------ |
-| `UNAUTHORIZED`        | 401         | Authentication required  |
-| `VALIDATION_ERROR`    | 422         | Validation failed        |
-| `NOT_FOUND`           | 404         | Resource not found       |
-| `CONFLICT`            | 409         | State conflict           |
-| `SERVICE_UNAVAILABLE` | 503         | Dependency unavailable   |
-| `RATE_LIMIT_EXCEEDED` | 429         | Too many requests        |
-| `FORBIDDEN`           | 403         | Insufficient permissions |
-| `INTERNAL_ERROR`      | 500         | Unexpected server error  |
+| Code | HTTP Status | Description |
+|---|---|---|
+| `UNAUTHORIZED` | 401 | Authentication required |
+| `VALIDATION_ERROR` | 422 | Validation failed |
+| `NOT_FOUND` | 404 | Resource not found |
+| `CONFLICT` | 409 | State conflict |
+| `SERVICE_UNAVAILABLE` | 503 | Dependency unavailable |
+| `RATE_LIMIT_EXCEEDED` | 429 | Too many requests |
+| `FORBIDDEN` | 403 | Insufficient permissions |
+| `INTERNAL_ERROR` | 500 | Unexpected server error |
 
 ---
 
 # Future Expansion
 
 ORDIN is architected to support future:
+- AI scheduling engines
+- prioritization systems
+- autonomous orchestration
+- notification systems
+- adaptive planning
+- optimization pipelines
+- intelligent calendar negotiation
 
-* AI scheduling engines
-* prioritization systems
-* autonomous orchestration
-* notification systems
-* adaptive planning
-* optimization pipelines
-* intelligent calendar negotiation
+---
+
+# License
+
+MIT
