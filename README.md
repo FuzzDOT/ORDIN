@@ -1,6 +1,6 @@
 # ORDIN
 
-**A production-grade FastAPI backend for an AI-native task orchestration and scheduling system, purpose-built to determine what users should work on next and schedule it realistically against their actual calendar availability.**
+**A production-grade FastAPI backend for an AI native task orchestration and scheduling system, purpose built to determine what users should work on next and schedule it realistically against their actual calendar availability.**
 
 ORDIN is the orchestration layer that sits between a user's tasks, their connected calendars, and a future AI scheduling engine. It is not a simple CRUD API bolted onto a database. It is a carefully layered system that handles Firebase authentication with automatic context propagation, structured task lifecycle management with explicit state transitions, privacy-preserving calendar synchronization that stores only the minimum information needed for scheduling, real-time availability computation that intersects user preferences with live calendar data, and the full observability infrastructure that makes all of it debuggable in production at scale.
 
